@@ -1,0 +1,33 @@
+# Target: RTX 4050 Laptop GPU 6141 MiB; i5-13450HX; WSL2; CUDA 12.6; NVIDIA driver 581.86
+# Base runtime: Prism llama.cpp 9a9394a895b96003ca842a6041cb28ac49a108f7
+# Candidate: base plus patches/ptq1-avx2.patch. Measured patch SHA256 7edef7b206cbd55bdda12bffd17a03ad297e5043f38c1e594fc21a3866ac6c87; published patch SHA256 bdb5036edc51e89605aef22684afd48930ad568f9c810553f2e011cc2eac9272 (only diff-text whitespace normalized after the run)
+# Baseline llama-bench SHA256: d6d2f79a86c468cb7a9ebc86133be5a36c5a0a3dd874bab8c514c9bcf844ebe4
+# Candidate llama-bench SHA256: b838bb972d18466cc690ba8f1f8d0c9c3efe9f768590b57154fa08ea196bbaeb
+# Model GGUF SHA256: 53107f530aa52eb00912263ab1ee29bd199261c87cd7b4ad4ca1318c1fe33ee3
+# Order: baseline, candidate, candidate, baseline; llama-bench default warmup; 3 repetitions/test/run
+# Flags: -ngl 99 -fa on -ot '^output.weight=CPU' -t 16 -b 64 -ub 64 -ctk q8_0 -ctv q8_0 -p 256 -n 64 -r 3 -o json
+run,variant,test,repetition,tokens_per_second,duration_ns
+1,baseline,pp256,1,193.257,1324663524
+1,baseline,pp256,2,194.069,1319115782
+1,baseline,pp256,3,184.366,1388539302
+1,baseline,tg64,1,5.99767,10670818513
+1,baseline,tg64,2,6.38992,10015767513
+1,baseline,tg64,3,6.6191,9668993746
+2,candidate,pp256,1,202.848,1262027147
+2,candidate,pp256,2,212.722,1203448707
+2,candidate,pp256,3,213.569,1198675428
+2,candidate,tg64,1,15.0541,4251319486
+2,candidate,tg64,2,15.2608,4193741235
+2,candidate,tg64,3,14.0409,4558103661
+3,candidate,pp256,1,196.139,1305195527
+3,candidate,pp256,2,211.521,1210281310
+3,candidate,pp256,3,208.081,1230290549
+3,candidate,tg64,1,8.6129,7430710459
+3,candidate,tg64,2,8.99643,7113933491
+3,candidate,tg64,3,8.51287,7518032749
+4,baseline,pp256,1,181.143,1413250036
+4,baseline,pp256,2,172.461,1484392896
+4,baseline,pp256,3,185.888,1377173363
+4,baseline,tg64,1,8.86436,7219921347
+4,baseline,tg64,2,8.52792,7504762580
+4,baseline,tg64,3,8.97362,7132018274

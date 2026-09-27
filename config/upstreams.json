@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "captured_for_project_date": "2026-09-19",
+  "bonsai_demo": {
+    "repository": "https://github.com/PrismML-Eng/Bonsai-demo.git",
+    "commit": "17b143e889a45c090816b520e79a50c996164e1f"
+  },
+  "llama_cpp_prism": {
+    "repository": "https://github.com/PrismML-Eng/llama.cpp.git",
+    "commit": "9a9394a895b96003ca842a6041cb28ac49a108f7",
+    "windows_release": "prism-b10709-9a9394a",
+    "cuda_release_family": "12.4"
+  },
+  "model": {
+    "repository": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+    "revision": "6ed5e12bf84b7a63069882c91dd9e9218647d17b",
+    "baseline_file": "Ternary-Bonsai-2-27B-PQ2_0.gguf",
+    "constrained_memory_file": "Ternary-Bonsai-2-27B-PTQ1_0.gguf"
+  }
+}

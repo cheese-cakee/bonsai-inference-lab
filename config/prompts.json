@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "temperature": 0,
+    "seed": 42,
+    "warmup_runs": 1,
+    "measured_runs": 5,
+    "note": "Do not change prompts after optimization begins; add a new corpus version instead."
+  },
+  "prompts": [
+    {
+      "id": "smoke_exact_001",
+      "category": "correctness",
+      "max_tokens": 16,
+      "prompt": "Reply with exactly this text and nothing else: BONSAI_OK",
+      "expected_exact": "BONSAI_OK"
+    },
+    {
+      "id": "json_tool_shape_001",
+      "category": "structured_output",
+      "max_tokens": 96,
+      "prompt": "Return only valid JSON with keys operation, left, right, and result for 17 multiplied by 23. Use numbers for left, right, and result.",
+      "expected_json": {
+        "operation": "multiply",
+        "left": 17,
+        "right": 23,
+        "result": 391
+      }
+    },
+    {
+      "id": "coding_small_001",
+      "category": "coding",
+      "max_tokens": 384,
+      "prompt": "Write a Python function named stable_unique(items) that preserves first-seen order, supports hashable values, and returns a list. Include exactly three concise asserts. Return code only."
+    },
+    {
+      "id": "reasoning_bounded_001",
+      "category": "reasoning",
+      "max_tokens": 256,
+      "prompt": "A service has p50 latency 40 ms and p99 latency 900 ms. Give three distinct engineering hypotheses and one measurement that would falsify each. Be concise."
+    },
+    {
+      "id": "agent_edit_plan_001",
+      "category": "agentic_coding",
+      "max_tokens": 512,
+      "prompt": "You inherit a Python CLI whose tests intermittently fail only on Windows because temporary files remain open. Produce a minimal investigation and patch plan. Include reproduction, instrumentation, likely ownership bug, regression test, and acceptance criteria."
+    }
+  ]
+}
