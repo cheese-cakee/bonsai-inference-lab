@@ -57,6 +57,26 @@ less often, and this repository does not isolate where that smaller gain comes f
 
 Details, methodology, and limits: [**technical report**](docs/technical-report.md).
 
+## Upstream status
+
+This work targets PrismML's fork at `9a9394a8`, when x86 had only the scalar PTQ1_0 kernel.
+Since then upstream merged SSE2/SSSE3 kernels
+([#248](https://github.com/PrismML-Eng/llama.cpp/pull/248)), and an AVX2/AVX-VNNI/AVX-512 kernel is
+under review ([#250](https://github.com/PrismML-Eng/llama.cpp/pull/250)). On the same
+microbenchmark and CPU, all three built on the current fork
+([raw data](results/upstream-comparison-2026-09-30.csv)):
+
+| Kernel | Median | Bitwise equal to generic |
+| --- | ---: | --- |
+| Generic | 7.84 ms | yes |
+| This repository (AVX2) | 2.25 ms | yes |
+| Upstream #248 (SSSE3), merged | 2.08 ms | yes |
+| Upstream #250 (AVX2 + AVX-VNNI), open | 0.98 ms | no, last-bit float differences |
+
+So this patch is not proposed upstream: the merged kernel is already slightly faster, and #250 is
+about 2.3× faster still, using AVX-VNNI `vpdpbusd` and a `pshufb` unpack. The repository stays a
+record of the placement experiment and the measurement method, pinned to the commit it measured.
+
 ## Verify the patch (no GPU or model needed)
 
 ```bash
