@@ -1,0 +1,133 @@
+# model_sha256=53107f530aa52eb00912263ab1ee29bd199261c87cd7b4ad4ca1318c1fe33ee3
+# patch_sha256=86be7ceefff110572fe5ede8961d3d1d228a5b0f36744a2f4c1f0273dfbc1d68
+# baseline_binary_sha256=d6d2f79a86c468cb7a9ebc86133be5a36c5a0a3dd874bab8c514c9bcf844ebe4
+# candidate_binary_sha256=bf1200e29fce7b6d4ff5413b9870723cd2a641b09c26325bab486daa7171d04e
+# cpu_model=13th Gen Intel(R) Core(TM) i5-13450HX
+# gpu=NVIDIA GeForce RTX 4050 Laptop GPU, 581.86, 6141 MiB
+# kernel=6.6.87.2-microsoft-standard-WSL2
+# utc_started=2026-09-30T17:46:47+00:00
+# order=5 rounds of baseline,candidate,candidate,baseline; cooldown 20s before each run
+# flags=-ngl 99 -fa on -ot ^output.weight=CPU -t 16 -b 64 -ub 64 -ctk q8_0 -ctv q8_0 -p 256 -n 64 -r 3 -o json
+# baseline: pristine PrismML llama.cpp 9a9394a8 (generic PTQ1_0 dot product); candidate: same commit + patches/ptq1-avx2.patch
+# GPU temperature and clock were sampled with nvidia-smi before each run; the GPU idles at 210 MHz between runs
+run,variant,test,repetition,tokens_per_second,gpu_temp_c_before,gpu_clock_mhz_before
+1,baseline,pp256,1,185.598,51,210
+1,baseline,pp256,2,187.617,51,210
+1,baseline,pp256,3,187.031,51,210
+1,baseline,tg64,1,6.21922,51,210
+1,baseline,tg64,2,6.1762,51,210
+1,baseline,tg64,3,6.37962,51,210
+2,candidate,pp256,1,206.486,55,240
+2,candidate,pp256,2,212.366,55,240
+2,candidate,pp256,3,213.239,55,240
+2,candidate,tg64,1,9.08993,55,240
+2,candidate,tg64,2,8.80465,55,240
+2,candidate,tg64,3,9.0065,55,240
+3,candidate,pp256,1,205.063,54,210
+3,candidate,pp256,2,212.523,54,210
+3,candidate,pp256,3,212.018,54,210
+3,candidate,tg64,1,15.125,54,210
+3,candidate,tg64,2,14.8873,54,210
+3,candidate,tg64,3,15.8698,54,210
+4,baseline,pp256,1,182.786,54,210
+4,baseline,pp256,2,187.635,54,210
+4,baseline,pp256,3,189.63,54,210
+4,baseline,tg64,1,9.42127,54,210
+4,baseline,tg64,2,9.19092,54,210
+4,baseline,tg64,3,9.46525,54,210
+5,baseline,pp256,1,182.728,55,210
+5,baseline,pp256,2,184.993,55,210
+5,baseline,pp256,3,189.195,55,210
+5,baseline,tg64,1,9.40149,55,210
+5,baseline,tg64,2,9.51936,55,210
+5,baseline,tg64,3,9.36268,55,210
+6,candidate,pp256,1,207.339,56,210
+6,candidate,pp256,2,209.637,56,210
+6,candidate,pp256,3,210.438,56,210
+6,candidate,tg64,1,14.3778,56,210
+6,candidate,tg64,2,15.6987,56,210
+6,candidate,tg64,3,15.7115,56,210
+7,candidate,pp256,1,206.263,55,210
+7,candidate,pp256,2,206.115,55,210
+7,candidate,pp256,3,211.924,55,210
+7,candidate,tg64,1,14.9728,55,210
+7,candidate,tg64,2,15.8732,55,210
+7,candidate,tg64,3,15.8399,55,210
+8,baseline,pp256,1,179.978,55,210
+8,baseline,pp256,2,187.475,55,210
+8,baseline,pp256,3,184.316,55,210
+8,baseline,tg64,1,9.1809,55,210
+8,baseline,tg64,2,7.99917,55,210
+8,baseline,tg64,3,9.39003,55,210
+9,baseline,pp256,1,179.814,56,210
+9,baseline,pp256,2,184.756,56,210
+9,baseline,pp256,3,187.312,56,210
+9,baseline,tg64,1,9.30272,56,210
+9,baseline,tg64,2,9.47936,56,210
+9,baseline,tg64,3,9.41321,56,210
+10,candidate,pp256,1,205.292,56,210
+10,candidate,pp256,2,207.841,56,210
+10,candidate,pp256,3,210.526,56,210
+10,candidate,tg64,1,14.6042,56,210
+10,candidate,tg64,2,15.284,56,210
+10,candidate,tg64,3,15.3628,56,210
+11,candidate,pp256,1,194.46,55,210
+11,candidate,pp256,2,208.886,55,210
+11,candidate,pp256,3,206.656,55,210
+11,candidate,tg64,1,14.9025,55,210
+11,candidate,tg64,2,15.7782,55,210
+11,candidate,tg64,3,15.7453,55,210
+12,baseline,pp256,1,177.444,56,210
+12,baseline,pp256,2,178.739,56,210
+12,baseline,pp256,3,189.006,56,210
+12,baseline,tg64,1,6.20139,56,210
+12,baseline,tg64,2,6.24053,56,210
+12,baseline,tg64,3,6.05752,56,210
+13,baseline,pp256,1,188.449,56,210
+13,baseline,pp256,2,188.3,56,210
+13,baseline,pp256,3,189.605,56,210
+13,baseline,tg64,1,9.57293,56,210
+13,baseline,tg64,2,9.19113,56,210
+13,baseline,tg64,3,9.15459,56,210
+14,candidate,pp256,1,174.817,57,510
+14,candidate,pp256,2,179.761,57,510
+14,candidate,pp256,3,195.298,57,510
+14,candidate,tg64,1,15.885,57,510
+14,candidate,tg64,2,15.6831,57,510
+14,candidate,tg64,3,15.8677,57,510
+15,candidate,pp256,1,211.036,56,210
+15,candidate,pp256,2,213.267,56,210
+15,candidate,pp256,3,212.755,56,210
+15,candidate,tg64,1,15.8662,56,210
+15,candidate,tg64,2,15.7609,56,210
+15,candidate,tg64,3,15.829,56,210
+16,baseline,pp256,1,188.705,55,210
+16,baseline,pp256,2,189.315,55,210
+16,baseline,pp256,3,190.054,55,210
+16,baseline,tg64,1,9.34976,55,210
+16,baseline,tg64,2,9.43786,55,210
+16,baseline,tg64,3,9.36939,55,210
+17,baseline,pp256,1,186.308,56,210
+17,baseline,pp256,2,187.692,56,210
+17,baseline,pp256,3,187.749,56,210
+17,baseline,tg64,1,9.54467,56,210
+17,baseline,tg64,2,9.39408,56,210
+17,baseline,tg64,3,9.11108,56,210
+18,candidate,pp256,1,190.783,56,210
+18,candidate,pp256,2,212.464,56,210
+18,candidate,pp256,3,210.089,56,210
+18,candidate,tg64,1,15.3328,56,210
+18,candidate,tg64,2,15.5488,56,210
+18,candidate,tg64,3,15.7506,56,210
+19,candidate,pp256,1,214.579,56,210
+19,candidate,pp256,2,212.922,56,210
+19,candidate,pp256,3,211.983,56,210
+19,candidate,tg64,1,15.8682,56,210
+19,candidate,tg64,2,15.7111,56,210
+19,candidate,tg64,3,15.7093,56,210
+20,baseline,pp256,1,185.829,55,210
+20,baseline,pp256,2,186.669,55,210
+20,baseline,pp256,3,187.133,55,210
+20,baseline,tg64,1,8.67513,55,210
+20,baseline,tg64,2,9.07669,55,210
+20,baseline,tg64,3,9.3901,55,210

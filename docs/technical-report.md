@@ -1,49 +1,185 @@
-# Technical report: PTQ1_0 inference on RTX 4050 Laptop GPU
+# Technical report: a 27B ternary model on a 6 GB laptop GPU
 
-## Problem and intervention
+## 1. Problem
 
-The 26.90B-parameter Ternary Bonsai 2 27B PTQ1_0 GGUF is 5.53 GiB (5,946,648,928 bytes) on a GPU reporting 6141 MiB total VRAM. Device occupancy from weights, KV cache, compute buffers, display, and other processes can cross a capacity cliff. A full-GPU placement is therefore not automatically fastest.
+[Ternary Bonsai 2 27B](https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf) has 26.90 billion
+parameters. In PrismML's PTQ1_0 format the GGUF file is 5.53 GiB (5,946,648,928 bytes). The target
+GPU, an RTX 4050 Laptop, reports 6141 MiB of VRAM, and that memory is shared with the KV cache,
+compute buffers, the CUDA context, and the Windows display. Loading everything onto the GPU leaves
+almost no headroom, and a GPU that runs out of memory headroom does not degrade gracefully: it falls
+off a cliff.
 
-The first intervention set `-ot '^output.weight=CPU'`, while keeping all 65 transformer layers on GPU with `-ngl 99`. It lowered reported GPU model-buffer allocation from 5395.33 to 5130.10 MiB (265.23 MiB). In the matched `pp256` placement test, throughput rose from 36.63 to 231.96 tok/s. The exact memory-traffic mechanism behind that jump was **not** directly proven; the capacity-cliff explanation is an inference from headroom and timing, not a claim that a specific paging event was measured.
+The goal was the fastest short, single-user generation on this laptop without changing the model's
+weights or output.
 
-Moving the output projection to CPU created a new hot path: PTQ1_0 × Q8_0 dot products. The patch adds an AVX2-specific implementation on CPUs with the required support and retains the generic fallback elsewhere. It changes neither model weights nor PTQ1 storage, GPU transformer kernels, attention, or KV-cache math. Thus the clean comparison for the AVX2 effect is **generic CPU head vs AVX2 CPU head**, with every placement and benchmark flag otherwise matched.
+## 2. The PTQ1_0 format, from first principles
 
-## Evidence collected to date
+A ternary model's weights are each one of `{-1, 0, +1}` times a per-group scale. PTQ1_0 stores
+groups of 128 weights in a 28-byte block, 1.75 bits per weight:
 
-| Experiment | Baseline | Candidate | Interpretation |
-| --- | ---: | ---: | --- |
-| GPU model buffer, all-GPU vs CPU output head | 5395.33 MiB | 5130.10 MiB | 265.23 MiB freed on GPU |
-| `pp256`, all-GPU vs CPU output head | 36.63 tok/s | 231.96 tok/s | Placement effect on this memory-constrained machine |
-| `tg64`, all-GPU vs generic CPU output head | 8.57 tok/s | 9.53 tok/s | Placement did not worsen short decode in that matched run |
-| `tg64`, generic vs AVX2 CPU head | 9.85 ± 0.05 tok/s | 15.44 ± 1.07 tok/s | Isolated AVX2 effect, three llama-bench repetitions |
-| `pp256`, generic vs AVX2 CPU head | 231.27 ± 5.49 tok/s | 238.62 ± 6.55 tok/s | Smaller prefill effect |
-| `pp512+tg128`, generic vs AVX2 CPU head | 41.65 ± 1.31 tok/s | 57.80 ± 0.28 tok/s | Combined-workload throughput |
+| Field | Bytes | Holds |
+| --- | ---: | --- |
+| `qs` | 24 | 120 weights, 5 per byte |
+| `qh` | 2 | 8 weights, 4 per byte |
+| `d` | 2 | FP16 scale: the largest absolute weight in the group |
 
-The ± figures above are from `llama-bench`'s three repetitions in the original experiments. They are not confidence intervals, and the experiments were not one globally randomized campaign. The new ABBA script records raw JSON and spread for a repeatable publication run. Avoid combining rows into one multiplier: the first three compare *placement*, while the latter three compare *CPU dot-product implementations*.
+**Quantizing.** Each weight `x` becomes the trit `t = round(x / d)` in `{-1, 0, +1}`, stored as
+`t + 1` in `{0, 1, 2}`. Five trits form a base-3 number `q = t₀·81 + t₁·27 + t₂·9 + t₃·3 + t₄` in
+`[0, 242]`. Since `3⁵ = 243 ≤ 256`, five trits fit in one byte, 1.6 bits each, close to the
+`log₂ 3 ≈ 1.585` minimum.
 
-The [September 27 UTC ABBA run](../results/rtx4050-abba-2026-09-27.csv) completed with six raw samples per variant/test. For `pp256`, median throughput was 185.13 baseline and 209.80 candidate tok/s (1.13×), with median absolute deviations of 6.06 and 3.35. For `tg64`, it was 7.57 and 11.52 tok/s (1.52×), with median absolute deviations of 1.24 and 2.96. The especially broad decode ranges—6.00–8.97 and 8.51–15.26—matter more than a single headline number. The CSV includes exact run ordering, per-repetition token rates and durations, model and patch digests, build revision, and command flags. Local full logs and GPU-state snapshots remain in ignored `artifacts/`.
+**The storage trick.** The byte does not hold `q` itself but `⌈q · 256 / 243⌉`: the number scaled
+into a fraction of 256. Now the leading base-3 digit can be read with a multiply and a shift:
 
-The screen-recorded demo's 3.7 → 11.8 generation tok/s is a **single captured run** with recording software consuming GPU resources. A separate CLI prompt returned the same visible AI-safety note at 7.2 → 15.3 generation tok/s, also a single run. These show end-to-end usability, not a quality equivalence or performance distribution.
+```
+digit 0 = (byte × 3) >> 8
+digit n = ((uint8_t)(byte × 3ⁿ) × 3) >> 8
+```
 
-## Correctness work
+Multiplying by `3` moves the leading digit above bit 8, like multiplying a decimal fraction by 10
+moves its first digit before the point. Multiplying by `3ⁿ` modulo 256 discards the first `n`
+digits. Rounding up when storing guarantees the truncation never lands one digit too low. Every
+operation is an 8- or 16-bit integer multiply, which SIMD units do well. This is the same idea as
+llama.cpp's TQ1_0 format.
 
-- A standalone oracle compared generic and AVX2 PTQ1 dot products: 900/900 randomized nonzero cases bitwise equal.
-- An exhaustive valid packed-byte sweep covered 5832 cases, with zero mismatches.
-- The CPU backend PTQ1 operation tests passed 45/45 supported cases in the prior local run.
-- A fixed prompt generated the same short continuation in the compared builds.
+**The dot product.** In the model, a weight row is multiplied by an activation vector quantized to
+Q8_0 (32 int8 values plus an FP16 scale per block). For one 128-weight block, with four activation
+blocks `k`:
 
-The oracle is in `checks/ptq1-avx2-dot-check.cpp`. Bitwise dot-product equality is stronger than merely close numeric agreement for that operation, but it does **not** establish model-wide quality parity over a diverse prompt corpus. The output-head placement can also change scheduling and memory conditions even when its numerical computation is intended to be equivalent.
+```
+block_sum = d_w × Σ_k ( d_y[k] × Σ_{32 values} t × y )
+```
 
-## Profiling and engineering rationale
+The inner sums are exact integers; only the four scales introduce floating-point rounding.
 
-Nsight Systems captured GPU kernel timelines for prefill and decode. Earlier CLI 2024.5.1 reporting did not expose CUDA kernel data in WSL; CLI 2026.5.1 did. The more useful deduction was to distinguish short prefill (`pp256`) from serial token generation (`tg64`) and check GPU headroom before treating the largest reported kernel as the sole bottleneck. A direct CUDA micro-optimization can be irrelevant or harmful if memory pressure dominates end-to-end time. Nsight Compute performance-counter access was initially blocked by `ERR_NVGPUCTRPERM`; no counter-derived roofline claim is made here.
+## 3. Intervention 1: move only the output head to the CPU
 
-## Limits and next release gates
+The output projection `output.weight` maps the hidden state (5120 values) to a score for every
+vocabulary token. Moving only this tensor to the CPU (`-ot '^output.weight=CPU'`), while keeping all
+65 transformer layers on the GPU (`-ngl 99`), lowered the reported GPU model buffer from 5395.33 MiB
+to 5130.10 MiB, freeing 265.23 MiB.
 
-- One laptop, one model revision, one pinned runtime base, and a short single-user workload; no general GPU or CPU portability claim.
-- 1024-token interactive context leaves safer memory headroom. Larger contexts need their own memory and latency sweep; earlier 2048+128 measurements were unstable.
-- Benchmark outcomes vary with laptop power limits, thermal state, WSL/driver version, display load, and background recording. The ABBA script records state but does not lock power or clock settings.
-- The patch has not undergone independent upstream review or production-serving validation. No server-load, concurrency, latency-tail, or long-running soak claim is made.
-- Experimental FP16-state and CUDA GEMV variants were explored but excluded after disappointing tradeoffs. They are not part of this release.
+In a matched prompt-processing test (`pp256`), throughput went from 36.63 to 231.96 tok/s. The exact
+mechanism was **not** directly measured. The explanation that fits the evidence is that the
+all-GPU placement sat past a memory-capacity cliff and the freed headroom moved it back; no specific
+paging or fallback event was traced.
 
-This is a targeted inference optimization artifact: source patch, correctness oracle, repeatable matched benchmark, and honest scope. Further work should be chosen from profiles and end-to-end measurements, not from a promised blanket speedup.
+The move has a cost. The output head now runs on the CPU for every generated token: 265 MiB of
+weights at 1.75 bits each is about 1.3 billion ternary-by-int8 multiply-adds per token, in
+PTQ1_0 × Q8_0 dot products. The fork had only a
+scalar implementation of that dot product for x86.
+
+## 4. Intervention 2: an AVX2 PTQ1_0 × Q8_0 dot product
+
+The patch ([`patches/ptq1-avx2.patch`](../patches/ptq1-avx2.patch)) adds
+`ggml_vec_dot_ptq1_0_q8_0` for AVX2 CPUs and keeps the generic version for everything else. It
+changes nothing else: no model weights, no storage format, no GPU kernel, no attention or KV-cache
+code.
+
+Per 128-weight block the kernel:
+
+1. Widens the 24 `qs` bytes to 16-bit lanes and extracts all five digits of 16 bytes at once with
+   `vpmullw` (multiply by `3ⁿ`), a mask to the low byte, another multiply by 3, and a shift.
+2. Decodes the two `qh` bytes the same way, with multipliers `1, 1, 3, 3, 9, 9, 27, 27` so that
+   the eight trits come out in the order the generic decoder uses.
+3. Assembles the four 32-weight vectors directly in registers, in exactly the generic weight order.
+4. Multiplies each by its 32 int8 activations with `vpmaddubsw` / `vpmaddwd` (the sign trick in
+   ggml's `mul_add_epi8`, since `vpmaddubsw` needs one unsigned operand).
+5. Reduces the four blocks' integer sums together with three `vphaddd` steps instead of four
+   separate horizontal sums.
+6. Applies the scales with **the same floating-point operations, in the same order**, as the
+   generic kernel.
+
+Step 6 is what makes the result bitwise identical. Integer addition is associative, so the integer
+work can be reordered freely. Floating-point addition is not, so the float code is kept
+statement-for-statement the same as the generic kernel.
+
+**Version history.** The first AVX2 version decoded the trits into a 128-byte stack buffer and
+reloaded them, and reduced each 32-weight block separately. The current version keeps the trits in
+registers and reduces the four blocks together. On the single-threaded microbenchmark in
+[`checks/ptq1-avx2-dot-check.cpp`](../checks/ptq1-avx2-dot-check.cpp) (4096 rows × 5120 columns,
+i5-13450HX, 24 processes alternating between the two builds, 36 samples per kernel;
+[raw data](../results/ptq1-microbench-2026-09-30.csv)):
+
+| Kernel | Median | Range | Speedup |
+| --- | ---: | ---: | ---: |
+| Generic (scalar) | 7.94 ms | 7.64-9.43 ms | 1.00× |
+| AVX2, first version | 3.49 ms | 3.28-3.82 ms | 2.27× |
+| AVX2, current | 2.30 ms | 2.18-2.62 ms | 3.45× |
+
+The ranges of the two AVX2 versions do not overlap.
+
+## 5. Correctness
+
+| Check | Result |
+| --- | --- |
+| Random rows, generic vs AVX2, `n` = 128, 256, 5120 | 900/900 bitwise equal, 900/900 non-zero |
+| Every valid packed byte (0-242) at every `qs` position | 0 mismatches over 5,832 cases |
+| ggml `test-backend-ops`, `MUL_MAT` with PTQ1_0 weights, CPU | 45/45 passed |
+| Negative control: a deliberately wrong `qh` multiplier | 810/900 mismatches; the check fails |
+
+Bitwise equality with the generic kernel is a stronger oracle than "close enough": any change in
+the order of float operations, or any decode error, shows up. It establishes that the CPU head
+computes exactly what it computed before; it does not, by itself, say anything about model quality
+relative to other placements or formats.
+
+The whole verification runs without a GPU or the model: [`scripts/verify.sh`](../scripts/verify.sh)
+fetches the pinned runtime, applies the patch, builds the CPU backend, and runs the oracle and the
+backend tests. CI runs it on every push.
+
+## 6. End-to-end measurements
+
+**Setup.** Baseline: pristine PrismML llama.cpp at `9a9394a8`, whose x86 CPU backend uses the
+generic PTQ1_0 dot product. Candidate: the same commit plus the patch. Both are CUDA builds for
+`sm_89` with `GGML_NATIVE=ON`, and both run with the output head on the CPU, so the only
+difference is the CPU dot product. Flags: `-ngl 99 -fa on -ot '^output.weight=CPU' -t 16 -b 64
+-ub 64 -ctk q8_0 -ctv q8_0 -p 256 -n 64 -r 3`. The model, patch, and both binaries are identified by
+SHA-256 in the [raw data](../results/rtx4050-abba-2026-09-30.csv).
+
+**Order.** Five rounds of baseline, candidate, candidate, baseline (20 runs, 3 repetitions each),
+with a 20-second cooldown before every run. Each adjacent baseline/candidate pair is a bracket; a
+real effect should show up in every bracket, while drift within the session would not.
+
+| Workload | Baseline median (MAD) | Candidate median (MAD) | Pooled ratio | Per-bracket ratios |
+| --- | ---: | ---: | ---: | --- |
+| `tg64` | 9.33 (0.15) tok/s | 15.70 (0.16) tok/s | 1.68× | 1.45-2.54, candidate faster in 10/10 |
+| `pp256` | 187.22 (1.70) tok/s | 209.86 (2.98) tok/s | 1.12× | 0.95-1.16, candidate faster in 9/10 |
+
+**Outliers are kept.** Three runs were slow: baseline run 1 (the first run of the session) and
+run 12 generated at about 6.2 tok/s instead of about 9.3, and candidate run 2 at 9.0 instead of
+about 15.7. Candidate run 14's `pp256` was 180 instead of about 210, which is the one bracket the
+candidate lost. The same kind of slowdown hit the September 27 run, whose two brackets disagreed
+(generation ratios 2.36 and 0.97, first AVX2 version), which is why that session is not used as evidence. The pooled
+medians, and a candidate win in every generation bracket, are robust to these runs.
+
+**Why generation gains most.** In generation, every step computes the output head once: about
+1.3 billion ternary-by-int8 multiply-adds on the CPU while the GPU waits. A 3.45× faster dot
+product shrinks that serial CPU phase. Prompt processing computes the head far less often; its
+smaller 1.12× gain is measured but its source is not isolated here.
+
+**Placement, measured separately.** Moving `output.weight` from the GPU to the CPU with the
+generic kernel is a different comparison. In a matched `pp256` run it went from 36.63 to
+231.96 tok/s (section 3), and a matched short-generation run showed no loss (8.57 to 9.53 tok/s
+`tg64`).
+
+## 7. Profiling notes
+
+Nsight Systems captured GPU kernel timelines for prefill and decode. (CLI 2024.5.1 did not report
+CUDA kernel data under WSL; 2026.5.1 did.) The useful conclusion was to separate short prefill
+(`pp256`) from serial token generation (`tg64`) and to check memory headroom before treating the
+largest GPU kernel as the bottleneck: a CUDA micro-optimization is irrelevant, or harmful, when
+memory pressure dominates end-to-end time. Nsight Compute counters were blocked by
+`ERR_NVGPUCTRPERM`, so no counter-derived roofline claim is made.
+
+Two other directions, an FP16 recurrent-state variant and a CUDA GEMV for the head, were tried and
+dropped after disappointing trade-offs. They are not part of this repository.
+
+## 8. Limits
+
+- One laptop, one model revision, one pinned runtime, short single-user workloads.
+- Laptop results move with power limits, temperature, WSL and driver versions, and display load.
+  The benchmark records GPU temperature and clock before every run but does not lock them.
+- A 1024-token context leaves safe memory headroom. Longer contexts were unstable and need their
+  own memory and latency sweep.
+- The patch has not been reviewed upstream or validated for production serving, concurrency, or
+  tail latency.
