@@ -1,0 +1,18 @@
+name: Verify patch
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Apply patch, bitwise oracle, backend tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify
+        run: bash scripts/verify.sh
